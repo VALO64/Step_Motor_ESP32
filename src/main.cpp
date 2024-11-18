@@ -12,17 +12,20 @@ const int IN4 = 22; // Naranja
 // Tiempo de retardo entre pasos para controlar la velocidad
 int delayTime = 3; // Ajusta este valor para controlar la velocidad del motor, 3 max vel, 10 min
 
-// Declaración de la función antes de su uso
-void stepClockwise();
-void stepCounterClockwise();
-void processCommand(String command); // Declaración de la función para evitar errores
-
 // Variables para controlar el motor
-bool isMotorOn = false;
+bool isMotorOn = false; // Estado general del motor (encendido o apagado)
+bool isMotorRunning = false;
 bool clockwise = true;
+bool continuousMode = false; // Modo de giro continuo
+int stepsToMove = 0; // Cantidad de pasos que debe moverse el motor
 
 // Objeto Bluetooth
 BluetoothSerial SerialBT;
+
+// Declaraciones de funciones
+void stepClockwise();
+void stepCounterClockwise();
+void processCommand(String command);
 
 void setup() {
   // Configuración de los pines como salida
@@ -52,12 +55,27 @@ void loop() {
     processCommand(command);
   }
 
-  // Mover el motor si está encendido
-  if (isMotorOn) {
+  // Si el motor está encendido y en modo continuo, continúa girando
+  if (isMotorOn && isMotorRunning && continuousMode) {
     if (clockwise) {
       stepClockwise();
     } else {
       stepCounterClockwise();
+    }
+  }
+
+  // Si el motor está encendido y debe moverse un número específico de pasos
+  if (isMotorOn && stepsToMove > 0) {
+    if (clockwise) {
+      stepClockwise();
+    } else {
+      stepCounterClockwise();
+    }
+    stepsToMove--;
+
+    // Detener el motor si ha terminado de moverse los pasos especificados
+    if (stepsToMove == 0) {
+      isMotorRunning = false;
     }
   }
 }
@@ -67,9 +85,19 @@ void processCommand(String command) {
   command.trim(); // Elimina espacios en blanco al inicio y al final
 
   if (command == "ON") {
-    isMotorOn = true;
+    isMotorOn = true; // Encender el motor
   } else if (command == "OFF") {
-    isMotorOn = false;
+    isMotorOn = false; // Apagar el motor
+    isMotorRunning = false; // Detener cualquier movimiento
+    continuousMode = false;
+  } else if (command == "RUN") {
+    if (isMotorOn) { // Solo si el motor está encendido
+      isMotorRunning = true;
+      continuousMode = true; // Activar modo de giro continuo
+    }
+  } else if (command == "STOP") {
+    isMotorRunning = false; // Detener cualquier movimiento
+    continuousMode = false; // Desactivar modo de giro continuo
   } else if (command == "CLOCKWISE") {
     clockwise = true;
   } else if (command == "COUNTERCLOCKWISE") {
@@ -78,6 +106,21 @@ void processCommand(String command) {
     delayTime = command.substring(6).toInt();
     if (delayTime < 3) delayTime = 3; // Velocidad máxima
     if (delayTime > 10) delayTime = 10; // Velocidad mínima
+  } else if (command.startsWith("MOVE ")) {
+    if (isMotorOn) { // Solo si el motor está encendido
+      int degrees = command.substring(5).toInt();
+    
+      if (degrees < 0) {
+        clockwise = false; // Cambiar dirección si los grados son negativos
+        degrees = -degrees; // Hacer los grados positivos
+      } else {
+        clockwise = true; // Mantener la dirección si los grados son positivos
+      }
+
+      stepsToMove = degrees * 4096 / 360; // Convertir grados a pasos
+      isMotorRunning = true; // Encender el motor para moverse
+      continuousMode = false; // Desactivar modo de giro continuo
+    }
   }
 }
 
